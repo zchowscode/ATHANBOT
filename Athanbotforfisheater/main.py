@@ -42,8 +42,8 @@ def schedule_prayers(channel, role):
 async def on_ready():
     print(f'Logged in as {bot.user}')
     guild = bot.guilds[0]
-    channel = guild.get_channel(1397102922789290067)  # Replace with your channel ID
-    role = guild.get_role(1397107910760202270)        # Replace with your role ID
+    channel = guild.get_channel(1397290675090751508)  # Replace with your channel ID
+    role = guild.get_role(1243994548624031856)        # Replace with your role ID
     schedule_prayers(channel, role)
 
 @bot.command()
