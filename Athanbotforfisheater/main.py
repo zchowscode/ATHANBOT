@@ -34,7 +34,7 @@ class PrayerButton(discord.ui.View):
         prayer_counts[key].add(interaction.user.id)
         count = len(prayer_counts[key])
 
-        new_content = f"🕌 It's time for **{self.prayer_name}** prayer!\n✅ **{count}** people have prayed so far."
+        new_content = f"{interaction.message.content.splitlines()[0]}\n✅ **{count}** people have prayed so far."
         await interaction.response.edit_message(content=new_content, view=self)
 
 def get_prayer_times(city="Atlanta", country="USA"):
@@ -63,7 +63,7 @@ async def send_prayer_ping(channel, role, prayer_name):
 
 @bot.command()
 async def testprayer(ctx):
-    role = ctx.guild.get_role(1243994548624031856)  # Your exact role ID
+    role = ctx.guild.get_role(1243994548624031856)  # Your role ID
     city, country = "Atlanta", "USA"
     timings = get_prayer_times(city, country)
     tz = pytz.timezone("America/New_York")
