@@ -107,7 +107,7 @@ async def send_dynamic_prayer_message(channel, role, prayer_name, is_test):
 
     async def update_countdown():
         while True:
-            await asyncio.sleep(300)
+            await asyncio.sleep(300)  # 5 minutes
             now = datetime.now(tz)
             diff = next_time - now
             if diff.total_seconds() <= 0:
