@@ -35,7 +35,6 @@ class PrayerButton(discord.ui.View):
         prayer_counts[key].add(interaction.user.id)
         count = len(prayer_counts[key])
 
-        # Replace entire message content (not append)
         new_content = f"🕌 It's time for **{self.prayer_name}** prayer!\n✅ **{count}** people have prayed so far."
         await interaction.response.edit_message(content=new_content, view=self)
 
@@ -61,13 +60,40 @@ def schedule_prayers(channel, role):
 async def send_prayer_ping(channel, role, prayer_name):
     content = f"{role.mention} 🕌 It's time for **{prayer_name}** prayer!\n✅ **0** people have prayed so far."
     view = PrayerButton(prayer_name)
-    message = await channel.send(content, view=view)
+    await channel.send(content, view=view)
 
 @bot.command()
 async def testprayer(ctx):
-    role = ctx.guild.get_role(1243994548624031856)  # Use your role ID
+    role = ctx.guild.get_role(1243994548624031856)  # Your exact role ID
+    city, country = "Atlanta", "USA"
+    timings = get_prayer_times(city, country)
+    tz = pytz.timezone("America/New_York")
+    now = datetime.now(tz)
+
+    prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+    next_prayer = None
+    next_time = None
+
+    for prayer in prayers:
+        time_str = timings[prayer]
+        hour, minute = map(int, time_str.split(":"))
+        prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if prayer_time < now:
+            prayer_time += timedelta(days=1)
+        if next_time is None or prayer_time < next_time:
+            next_time = prayer_time
+            next_prayer = prayer
+
+    diff = next_time - now
+    hours, remainder = divmod(int(diff.total_seconds()), 3600)
+    minutes = remainder // 60
+
+    content = (
+        f"{role.mention} 🕌 This is a **test prayer** message!\n"
+        f"✅ **0** people have prayed so far.\n"
+        f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
+    )
     view = PrayerButton("Test")
-    content = f"{role.mention} 🕌 This is a **test prayer** message!\n✅ **0** people have prayed so far."
     await ctx.send(content, view=view)
 
 @bot.command()
@@ -126,15 +152,21 @@ async def cmds(ctx):
 
 @tasks.loop(hours=5)
 async def send_quran_quote():
-    channel = bot.get_channel(1397290675090751508)  # Restored channel ID
+    channel = bot.get_channel(1397290675090751508)  # Your channel ID here
     verses = [(1, 1), (2, 255), (3, 26), (18, 110)]
     surah, ayah = random.choice(verses)
     url = f"http://api.aladhan.com/v1/quran/verse/{surah}/{ayah}"
-    response = requests.get(url).json()
-
-    data = response.get('data', {})
-    arabic = data.get('text', 'Verse not available.')
-    translation = data.get('edition', {}).get('englishName', 'Translation not available.')
+    try:
+        response = requests.get(url).json()
+        data = response.get('data', {})
+        arabic = data.get('text', 'Verse not available.')
+        translation = data.get('edition', {}).get('language', 'Translation not available.')
+        translation_text = data.get('edition', {}).get('translation', None)
+        if translation_text:
+            translation = translation_text
+    except Exception:
+        arabic = "Verse not available."
+        translation = "Translation not available."
 
     message = f"📖 **Daily Quran Quote**\n\n{arabic}\n\n*{translation}*"
     await channel.send(message)
@@ -143,8 +175,8 @@ async def send_quran_quote():
 async def on_ready():
     print(f"Logged in as {bot.user}")
     guild = bot.guilds[0]
-    channel = guild.get_channel(1397290675090751508)  # Restored channel ID
-    role = guild.get_role(1243994548624031856)  # Restored role ID
+    channel = guild.get_channel(1397290675090751508)  # Your channel ID here
+    role = guild.get_role(1243994548624031856)  # Your role ID here
     schedule_prayers(channel, role)
     send_quran_quote.start()
 
