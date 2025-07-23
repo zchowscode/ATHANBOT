@@ -93,7 +93,7 @@ async def testprayer(ctx):
         f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
     )
     view = PrayerButton("Test")
-    await ctx.send(content, view=view)
+    await ctx.send(content, view=view)  # Single send only
 
 @bot.command()
 async def ping(ctx):
