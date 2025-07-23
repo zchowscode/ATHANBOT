@@ -15,14 +15,88 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 scheduler = AsyncIOScheduler()
 
-async def send_prayer_ping(channel, role, prayer_name):
-    message = await channel.send(f"{role.mention} 🕌 It's time for **{prayer_name}** prayer!")
-    await message.add_reaction("🕌")
+# === BUTTON VIEW CLASS ===
+class PrayerView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.count = 0
 
+    @discord.ui.button(label="I prayed 🙏", style=discord.ButtonStyle.primary, custom_id="prayer_button")
+    async def prayer_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.count += 1
+        await interaction.response.edit_message(
+            content=interaction.message.content.split("\n⏳")[0] + 
+            f"\n\n🙏 {self.count} people clicked 'I prayed 🙏'\n" + 
+            interaction.message.content.split("\n")[-1],
+            view=self
+        )
+
+# === SEND PRAYER PING WITH BUTTON + COUNTDOWN ===
+async def send_prayer_ping(channel, role, prayer_name):
+    view = PrayerView()
+
+    tz = pytz.timezone("America/New_York")
+    now = datetime.now(tz)
+    timings = get_prayer_times()
+
+    prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+    upcoming = []
+
+    for p in prayers:
+        hour, minute = map(int, timings[p].split(":"))
+        t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if t < now:
+            t += timedelta(days=1)
+        upcoming.append((p, t))
+
+    upcoming.sort(key=lambda x: x[1])
+    next_prayer = next((p for p in upcoming if p[0] != prayer_name), None)
+
+    def format_remaining(t):
+        diff = t - datetime.now(tz)
+        hours, rem = divmod(int(diff.total_seconds()), 3600)
+        minutes, _ = divmod(rem, 60)
+        return f"{hours}h {minutes}m"
+
+    content = (
+        f"{role.mention} 🕌 **Prayer Time Alert**\n"
+        f"**{prayer_name}** prayer has begun!\n\n"
+        f"🙏 Click the button if you've prayed.\n"
+    )
+
+    if next_prayer:
+        time_left = format_remaining(next_prayer[1])
+        content += f"\n⏳ Time until **{next_prayer[0]}**: {time_left}"
+
+    msg = await channel.send(content, view=view)
+
+    # Update every 5 minutes
+    async def updater():
+        while True:
+            if next_prayer:
+                time_left = format_remaining(next_prayer[1])
+                new_content = (
+                    f"{role.mention} 🕌 **Prayer Time Alert**\n"
+                    f"**{prayer_name}** prayer has begun!\n\n"
+                    f"🙏 Click the button if you've prayed.\n"
+                    f"\n⏳ Time until **{next_prayer[0]}**: {time_left}"
+                )
+                try:
+                    await msg.edit(content=new_content, view=view)
+                except discord.NotFound:
+                    break
+                await asyncio.sleep(300)
+            else:
+                break
+
+    bot.loop.create_task(updater())
+
+# === PRAYER API ===
 def get_prayer_times(city="Atlanta", country="USA"):
     url = f"http://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=2"
     return requests.get(url).json()['data']['timings']
 
+# === SCHEDULE PRAYERS ===
 def schedule_prayers(channel, role):
     scheduler.remove_all_jobs()
     tz = pytz.timezone("America/New_York")
@@ -38,6 +112,7 @@ def schedule_prayers(channel, role):
         scheduler.add_job(send_prayer_ping, 'date', run_date=run_time, args=[channel, role, prayer_name])
     scheduler.start()
 
+# === BOT READY EVENT ===
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
@@ -46,6 +121,7 @@ async def on_ready():
     role = guild.get_role(1243994548624031856)        # Replace with your role ID
     schedule_prayers(channel, role)
 
+# === COMMANDS ===
 @bot.command()
 async def ping(ctx):
     await ctx.send("Bot is online!")
@@ -88,53 +164,12 @@ async def today_prayers(ctx):
 
     await ctx.send(msg)
 
-@bot.command(name='test')
-async def test(ctx):
-    await ctx.send("Test prayer ping will be sent in 5 seconds...")
-    guild = ctx.guild
-    role = guild.get_role(1397107910760202270)  # Replace with your role ID
-    channel = ctx.channel
-    scheduler.add_job(send_prayer_ping, 'date', run_date=datetime.utcnow() + timedelta(seconds=5), args=[channel, role, "Test"])
+@bot.command(name='testprayer')
+async def testprayer(ctx):
+    role = ctx.guild.get_role(1243994548624031856)  # Main prayer role
+    await send_prayer_ping(ctx.channel, role, "Test Prayer")
 
-@bot.command(name='countdown')
-async def countdown(ctx):
-    city = "Atlanta"
-    country = "USA"
-    tz = pytz.timezone("America/New_York")
-    prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
-
-    msg = await ctx.send("Starting countdown...")
-
-    while True:
-        timings = get_prayer_times(city, country)
-        now = datetime.now(tz)
-
-        next_prayer = None
-        next_time = None
-
-        for prayer in prayers:
-            hour, minute = map(int, timings[prayer].split(":"))
-            prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            if prayer_time < now:
-                prayer_time += timedelta(days=1)
-            if next_time is None or prayer_time < next_time:
-                next_time = prayer_time
-                next_prayer = prayer
-
-        diff = next_time - now
-        hours, remainder = divmod(int(diff.total_seconds()), 3600)
-        minutes, seconds = divmod(remainder, 60)
-
-        countdown_text = f"Next prayer: **{next_prayer}** in {hours}h {minutes}m {seconds}s."
-
-        await msg.edit(content=countdown_text)
-
-        if diff.total_seconds() <= 0:
-            await msg.edit(content=f"It's time for **{next_prayer}** prayer! 🕌")
-            break
-
-        await asyncio.sleep(60)  # Update every minute to avoid rate limits
-
+# === KEEP ALIVE ===
 app = Flask('')
 
 @app.route('/')
