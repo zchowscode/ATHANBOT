@@ -96,13 +96,14 @@ async def testprayer(ctx):
     hours, remainder = divmod(int(diff.total_seconds()), 3600)
     minutes = remainder // 60
 
+    # Build full message content before creating the view
     content = (
         f"{role.mention} 🕌 This is a **test prayer** message!\n"
         f"✅ **0** people have prayed so far.\n"
         f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
     )
     view = PrayerButton("Test")
-    await ctx.send(content, view=view)  # Single send only
+    await ctx.send(content, view=view)  # send once with full content
 
 @bot.command()
 async def ping(ctx):
