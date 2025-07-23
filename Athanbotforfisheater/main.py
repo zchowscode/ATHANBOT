@@ -17,10 +17,11 @@ scheduler = AsyncIOScheduler()
 prayer_counts = {}
 opted_out_users = set()
 
-class PrayerButton(discord.ui.View):
-    def __init__(self, prayer_name):
+class PrayerOptView(discord.ui.View):
+    def __init__(self, prayer_name, user_id):
         super().__init__(timeout=None)
         self.prayer_name = prayer_name
+        self.user_id = user_id
 
     @discord.ui.button(label="✅ I Prayed", style=discord.ButtonStyle.success, custom_id="prayed_button")
     async def prayed(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -39,19 +40,15 @@ class PrayerButton(discord.ui.View):
         new_content = f"{interaction.message.content.splitlines()[0]}\n✅ **{count}** people have prayed so far.\n{interaction.message.content.splitlines()[-1]}"
         await interaction.response.edit_message(content=new_content, view=self)
 
-class OptOutButton(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=None)
-        self.user_id = user_id
-
-    @discord.ui.button(label="🚫 Opt Out of 5-min Reminder", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="🚫 Opt Out 5-min Reminder", style=discord.ButtonStyle.danger, custom_id="optout_button")
     async def opt_out(self, interaction: discord.Interaction, button: discord.ui.Button):
-        opted_out_users.add(self.user_id)
+        opted_out_users.add(interaction.user.id)
         await interaction.response.send_message("You have opted out of the 5-minute prayer reminder.", ephemeral=True)
 
-    @discord.ui.button(label="✅ Opt In to 5-min Reminder", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="✅ Opt In 5-min Reminder", style=discord.ButtonStyle.success, custom_id="optin_button")
     async def opt_in(self, interaction: discord.Interaction, button: discord.ui.Button):
-        opted_out_users.discard(self.user_id)
+        if interaction.user.id in opted_out_users:
+            opted_out_users.remove(interaction.user.id)
         await interaction.response.send_message("You have opted in to the 5-minute prayer reminder.", ephemeral=True)
 
 def get_prayer_times(city="Atlanta", country="USA"):
@@ -87,7 +84,7 @@ async def send_5_min_reminder(channel, prayer_name):
             try:
                 await member.send(f"⏳ Only **5 minutes** left until **{prayer_name}** prayer. Please prepare to pray.")
             except:
-                continue
+                pass
 
 async def send_prayer_ping(channel, role, prayer_name):
     await send_dynamic_prayer_message(channel, role, prayer_name, is_test=False)
@@ -122,16 +119,16 @@ async def send_dynamic_prayer_message(channel, role, prayer_name, is_test):
         f"✅ **0** people have prayed so far.\n"
         f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
     )
-    view = PrayerButton(prayer_name)
+
+    view = PrayerOptView(prayer_name, user_id=None)
     message = await channel.send(content, view=view)
-    await channel.send(view=OptOutButton(message.author.id))
 
     key = (message.id, prayer_name)
     prayer_counts[key] = set()
 
     async def update_countdown():
         while True:
-            await asyncio.sleep(300)
+            await asyncio.sleep(300)  # 5 minutes
             now = datetime.now(tz)
             diff = next_time - now
             if diff.total_seconds() <= 0:
@@ -144,7 +141,10 @@ async def send_dynamic_prayer_message(channel, role, prayer_name, is_test):
                 f"✅ **{count}** people have prayed so far.\n"
                 f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
             )
-            await message.edit(content=new_content, view=view)
+            try:
+                await message.edit(content=new_content, view=view)
+            except:
+                break
 
     bot.loop.create_task(update_countdown())
 
@@ -202,7 +202,7 @@ async def cmds(ctx):
 - `!ping` — Check if the bot is online.
 - `!nextnamaz` — Show the next prayer time.
 - `!todayprayers` — Show today's full prayer times.
-- `!testprayer` — Send a test prayer message with interactive button.
+- `!testprayer` — Send a test prayer message with interactive buttons.
 - `!cmds` — Show this command list.
 """
     await ctx.send(commands_list)
