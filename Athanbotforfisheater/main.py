@@ -20,8 +20,8 @@ update_tasks = {}  # message_id: asyncio.Task for updating countdown
 
 PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
 TIMEZONE = pytz.timezone("America/New_York")
-CHANNEL_ID = 1397290675090751508
-ROLE_ID = 1243994548624031856
+CHANNEL_ID = 1397290675090751508  # Your channel ID here
+ROLE_ID = 1243994548624031856     # Your role ID here
 
 class PrayerButton(discord.ui.View):
     def __init__(self, prayer_name, next_prayer, next_prayer_time):
@@ -151,8 +151,12 @@ async def testquran(ctx):
     url = f"http://api.aladhan.com/v1/quran/verse/{surah}/{ayah}"
     response = requests.get(url).json()
 
-    arabic = response['data']['text']
-    translation = response['data']['edition']['translation']
+    if 'data' in response and isinstance(response['data'], dict) and 'text' in response['data']:
+        arabic = response['data']['text']
+        translation = response['data']['edition']['translation']
+    else:
+        arabic = "Error fetching verse."
+        translation = ""
 
     message = f"📖 **Test Quran Quote**\n\n{arabic}\n\n*{translation}*"
     await ctx.send(message)
@@ -191,6 +195,20 @@ async def today_prayers(ctx):
 
     await ctx.send(msg)
 
+@bot.command()
+async def cmds(ctx):
+    commands_list = """
+**Available Commands:**
+- !ping : Check if the bot is online.
+- !nextnamaz : Show the next prayer time.
+- !todayprayers : Show all prayer times for today.
+- !countdown : Show time remaining until the next prayer.
+- !testprayer : Send a test prayer ping with role mention and countdown.
+- !testquran : Send a random Quran verse with translation.
+- ✅ I Prayed button : Click to mark you prayed and update count anonymously.
+"""
+    await ctx.send(commands_list)
+
 @tasks.loop(hours=5)
 async def send_quran_quote():
     channel = bot.get_channel(CHANNEL_ID)
@@ -199,8 +217,12 @@ async def send_quran_quote():
     url = f"http://api.aladhan.com/v1/quran/verse/{surah}/{ayah}"
     response = requests.get(url).json()
 
-    arabic = response['data']['text']
-    translation = response['data']['edition']['translation']
+    if 'data' in response and isinstance(response['data'], dict) and 'text' in response['data']:
+        arabic = response['data']['text']
+        translation = response['data']['edition']['translation']
+    else:
+        arabic = "Error fetching verse."
+        translation = ""
 
     message = f"📖 **Daily Quran Quote**\n\n{arabic}\n\n*{translation}*"
     await channel.send(message)
