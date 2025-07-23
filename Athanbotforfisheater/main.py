@@ -7,23 +7,22 @@ import pytz
 import os
 from flask import Flask
 from threading import Thread
+import asyncio
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 scheduler = AsyncIOScheduler()
 
-prayer_counts = {}  # (message_id, prayer_name): set of user_ids
+prayer_counts = {}
 
 class PrayerButton(discord.ui.View):
     def __init__(self, prayer_name):
         super().__init__(timeout=None)
         self.prayer_name = prayer_name
-        self.prayed_button = discord.ui.Button(label="✅ I Prayed", style=discord.ButtonStyle.success, custom_id=f"prayed_button_{prayer_name}")
-        self.prayed_button.callback = self.prayed
-        self.add_item(self.prayed_button)
 
-    async def prayed(self, interaction: discord.Interaction):
+    @discord.ui.button(label="✅ I Prayed", style=discord.ButtonStyle.success, custom_id="prayed_button")
+    async def prayed(self, interaction: discord.Interaction, button: discord.ui.Button):
         key = (interaction.message.id, self.prayer_name)
 
         if key not in prayer_counts:
@@ -36,13 +35,7 @@ class PrayerButton(discord.ui.View):
         prayer_counts[key].add(interaction.user.id)
         count = len(prayer_counts[key])
 
-        lines = interaction.message.content.splitlines()
-        for i, line in enumerate(lines):
-            if "✅" in line:
-                lines[i] = f"✅ **{count}** people have prayed so far."
-                break
-        new_content = "\n".join(lines)
-
+        new_content = f"{interaction.message.content.splitlines()[0]}\n✅ **{count}** people have prayed so far.\n{interaction.message.content.splitlines()[-1]}"
         await interaction.response.edit_message(content=new_content, view=self)
 
 def get_prayer_times(city="Atlanta", country="USA"):
@@ -62,17 +55,12 @@ def schedule_prayers(channel, role):
         if run_time < now:
             run_time += timedelta(days=1)
         scheduler.add_job(send_prayer_ping, 'date', run_date=run_time, args=[channel, role, prayer_name])
-    if not scheduler.running:
-        scheduler.start()
+    scheduler.start()
 
 async def send_prayer_ping(channel, role, prayer_name):
-    content = f"{role.mention} 🕌 It's time for **{prayer_name}** prayer!\n✅ **0** people have prayed so far."
-    view = PrayerButton(prayer_name)
-    await channel.send(content, view=view)
+    await send_dynamic_prayer_message(channel, role, prayer_name, is_test=False)
 
-@bot.command()
-async def testprayer(ctx):
-    role = ctx.guild.get_role(1243994548624031856)  # Your role ID
+async def send_dynamic_prayer_message(channel, role, prayer_name, is_test):
     city, country = "Atlanta", "USA"
     timings = get_prayer_times(city, country)
     tz = pytz.timezone("America/New_York")
@@ -86,7 +74,7 @@ async def testprayer(ctx):
         time_str = timings[prayer]
         hour, minute = map(int, time_str.split(":"))
         prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if prayer_time < now:
+        if prayer_time <= now:
             prayer_time += timedelta(days=1)
         if next_time is None or prayer_time < next_time:
             next_time = prayer_time
@@ -96,14 +84,41 @@ async def testprayer(ctx):
     hours, remainder = divmod(int(diff.total_seconds()), 3600)
     minutes = remainder // 60
 
-    # Build full message content before creating the view
+    title = "This is a **test prayer** message!" if is_test else f"It's time for **{prayer_name}** prayer!"
     content = (
-        f"{role.mention} 🕌 This is a **test prayer** message!\n"
+        f"{role.mention} 🕌 {title}\n"
         f"✅ **0** people have prayed so far.\n"
         f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
     )
-    view = PrayerButton("Test")
-    await ctx.send(content, view=view)  # send once with full content
+    view = PrayerButton(prayer_name)
+    message = await channel.send(content, view=view)
+
+    key = (message.id, prayer_name)
+    prayer_counts[key] = set()
+
+    async def update_countdown():
+        while True:
+            await asyncio.sleep(300)
+            now = datetime.now(tz)
+            diff = next_time - now
+            if diff.total_seconds() <= 0:
+                break
+            hours, remainder = divmod(int(diff.total_seconds()), 3600)
+            minutes = remainder // 60
+            count = len(prayer_counts[key])
+            new_content = (
+                f"{role.mention} 🕌 {title}\n"
+                f"✅ **{count}** people have prayed so far.\n"
+                f"⏳ Next prayer {next_prayer} in {hours}h {minutes}m."
+            )
+            await message.edit(content=new_content, view=view)
+
+    bot.loop.create_task(update_countdown())
+
+@bot.command()
+async def testprayer(ctx):
+    role = ctx.guild.get_role(1243994548624031856)
+    await send_dynamic_prayer_message(ctx.channel, role, "Test", is_test=True)
 
 @bot.command()
 async def ping(ctx):
@@ -163,8 +178,8 @@ async def cmds(ctx):
 async def on_ready():
     print(f"Logged in as {bot.user}")
     guild = bot.guilds[0]
-    channel = guild.get_channel(1397290675090751508)  # Your channel ID
-    role = guild.get_role(1243994548624031856)  # Your role ID
+    channel = guild.get_channel(1397290675090751508)
+    role = guild.get_role(1243994548624031856)
     schedule_prayers(channel, role)
 
 app = Flask('')
