@@ -96,6 +96,45 @@ async def test(ctx):
     channel = ctx.channel
     scheduler.add_job(send_prayer_ping, 'date', run_date=datetime.utcnow() + timedelta(seconds=5), args=[channel, role, "Test"])
 
+@bot.command(name='countdown')
+async def countdown(ctx):
+    city = "Atlanta"
+    country = "USA"
+    tz = pytz.timezone("America/New_York")
+    prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+
+    msg = await ctx.send("Starting countdown...")
+
+    while True:
+        timings = get_prayer_times(city, country)
+        now = datetime.now(tz)
+
+        next_prayer = None
+        next_time = None
+
+        for prayer in prayers:
+            hour, minute = map(int, timings[prayer].split(":"))
+            prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if prayer_time < now:
+                prayer_time += timedelta(days=1)
+            if next_time is None or prayer_time < next_time:
+                next_time = prayer_time
+                next_prayer = prayer
+
+        diff = next_time - now
+        hours, remainder = divmod(int(diff.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        countdown_text = f"Next prayer: **{next_prayer}** in {hours}h {minutes}m {seconds}s."
+
+        await msg.edit(content=countdown_text)
+
+        if diff.total_seconds() <= 0:
+            await msg.edit(content=f"It's time for **{next_prayer}** prayer! 🕌")
+            break
+
+        await asyncio.sleep(60)  # Update every minute to avoid rate limits
+
 app = Flask('')
 
 @app.route('/')
