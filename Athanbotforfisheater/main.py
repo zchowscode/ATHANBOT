@@ -35,6 +35,7 @@ class PrayerButton(discord.ui.View):
         prayer_counts[key].add(interaction.user.id)
         count = len(prayer_counts[key])
 
+        # Replace entire message content (not append)
         new_content = f"🕌 It's time for **{self.prayer_name}** prayer!\n✅ **{count}** people have prayed so far."
         await interaction.response.edit_message(content=new_content, view=self)
 
