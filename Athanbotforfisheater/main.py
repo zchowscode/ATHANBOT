@@ -120,13 +120,12 @@ async def send_prayer_ping(channel, role, prayer_name):
     timings = get_prayer_times()
     next_prayer, next_prayer_time = get_next_prayer_and_time(timings)
     content = (
-        f"🕌 It's time for **{prayer_name}** prayer!\n"
+        f"{role.mention} 🕌 It's time for **{prayer_name}** prayer!\n"
         f"✅ **0** people have prayed so far.\n"
         f"⏳ Next prayer **{next_prayer}** in {get_time_until(next_prayer_time)}."
     )
     view = PrayerButton(prayer_name, next_prayer, next_prayer_time)
     message = await channel.send(content, view=view)
-    # Start background task to update countdown every 5 mins
     task = asyncio.create_task(update_prayer_message(message, prayer_name, next_prayer, next_prayer_time))
     update_tasks[message.id] = task
 
@@ -134,8 +133,9 @@ async def send_prayer_ping(channel, role, prayer_name):
 async def testprayer(ctx):
     timings = get_prayer_times()
     next_prayer, next_prayer_time = get_next_prayer_and_time(timings)
+    role = ctx.guild.get_role(ROLE_ID)
     content = (
-        f"🕌 This is a **test prayer** message!\n"
+        f"{role.mention} 🕌 This is a **test prayer** message!\n"
         f"✅ **0** people have prayed so far.\n"
         f"⏳ Next prayer **{next_prayer}** in {get_time_until(next_prayer_time)}."
     )
@@ -143,6 +143,19 @@ async def testprayer(ctx):
     message = await ctx.send(content, view=view)
     task = asyncio.create_task(update_prayer_message(message, "Test", next_prayer, next_prayer_time))
     update_tasks[message.id] = task
+
+@bot.command()
+async def testquran(ctx):
+    verses = [(1, 1), (2, 255), (3, 26), (18, 110)]
+    surah, ayah = random.choice(verses)
+    url = f"http://api.aladhan.com/v1/quran/verse/{surah}/{ayah}"
+    response = requests.get(url).json()
+
+    arabic = response['data']['text']
+    translation = response['data']['edition']['translation']
+
+    message = f"📖 **Test Quran Quote**\n\n{arabic}\n\n*{translation}*"
+    await ctx.send(message)
 
 @bot.command()
 async def countdown(ctx):
@@ -160,8 +173,6 @@ async def next_namaz(ctx):
     city = "Atlanta"
     country = "USA"
     timings = get_prayer_times(city, country)
-
-    now = datetime.now(TIMEZONE)
 
     next_prayer, next_time = get_next_prayer_and_time(timings)
 
