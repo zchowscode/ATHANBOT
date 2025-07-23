@@ -63,6 +63,54 @@ async def send_prayer_ping(channel, role, prayer_name):
     view = PrayerButton(prayer_name)
     message = await channel.send(content, view=view)
 
+@bot.command()
+async def testprayer(ctx):
+    await ctx.send("Sending test prayer message...")
+    view = PrayerButton("Test")
+    await ctx.send("🕌 This is a **test prayer** message!\n✅ **0** people have prayed so far.", view=view)
+
+@bot.command()
+async def ping(ctx):
+    await ctx.send("Bot is online!")
+
+@bot.command(name='nextnamaz')
+async def next_namaz(ctx):
+    city = "Atlanta"
+    country = "USA"
+    timings = get_prayer_times(city, country)
+
+    tz = pytz.timezone("America/New_York")
+    now = datetime.now(tz)
+
+    prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+    next_prayer = None
+    next_time = None
+
+    for prayer in prayers:
+        time_str = timings[prayer]
+        hour, minute = map(int, time_str.split(":"))
+        prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if prayer_time < now:
+            prayer_time += timedelta(days=1)
+        if next_time is None or prayer_time < next_time:
+            next_time = prayer_time
+            next_prayer = prayer
+
+    time_str = next_time.strftime("%I:%M %p")
+    await ctx.send(f"Next prayer is **{next_prayer}** at {time_str} (Atlanta time).")
+
+@bot.command(name='todayprayers')
+async def today_prayers(ctx):
+    city = "Atlanta"
+    country = "USA"
+    timings = get_prayer_times(city, country)
+
+    msg = "**Today's Prayer Times (Atlanta):**\n"
+    for prayer in ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']:
+        msg += f"{prayer}: {timings[prayer]}\n"
+
+    await ctx.send(msg)
+
 @tasks.loop(hours=5)
 async def send_quran_quote():
     channel = bot.get_channel(YOUR_CHANNEL_ID)  # Replace with your channel ID
