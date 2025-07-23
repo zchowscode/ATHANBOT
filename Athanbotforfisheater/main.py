@@ -7,7 +7,6 @@ import pytz
 import os
 from flask import Flask
 from threading import Thread
-import random
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -146,47 +145,9 @@ async def cmds(ctx):
 - `!nextnamaz` — Show the next prayer time.
 - `!todayprayers` — Show today's full prayer times.
 - `!testprayer` — Send a test prayer message with interactive button.
-- `!testquran` — Get a test daily Quran quote.
 - `!cmds` — Show this command list.
 """
     await ctx.send(commands_list)
-
-@tasks.loop(hours=5)
-async def send_quran_quote():
-    channel = bot.get_channel(1397290675090751508)  # Your channel ID
-    verses = [(1, 1), (2, 255), (3, 26), (18, 110)]
-    surah, ayah = random.choice(verses)
-    url = f"https://api.quran.com/api/v4/verses/by_key/{surah}:{ayah}?language=en&words=false&fields=text_uthmani,translations&translation_fields=resource_id,language_name,text"
-
-    try:
-        response = requests.get(url).json()
-        verse = response['verse']
-        arabic = verse['text_uthmani']
-        translation = verse['translations'][0]['text']
-    except Exception:
-        arabic = "Verse not available."
-        translation = "Translation not available."
-
-    message = f"📖 **Daily Quran Quote**\n\n{arabic}\n\n*{translation}*"
-    await channel.send(message)
-
-@bot.command()
-async def testquran(ctx):
-    verses = [(1, 1), (2, 255), (3, 26), (18, 110)]
-    surah, ayah = random.choice(verses)
-    url = f"https://api.quran.com/api/v4/verses/by_key/{surah}:{ayah}?language=en&words=false&fields=text_uthmani,translations&translation_fields=resource_id,language_name,text"
-
-    try:
-        response = requests.get(url).json()
-        verse = response['verse']
-        arabic = verse['text_uthmani']
-        translation = verse['translations'][0]['text']
-    except Exception:
-        arabic = "Verse not available."
-        translation = "Translation not available."
-
-    message = f"📖 **Test Quran Quote**\n\n{arabic}\n\n*{translation}*"
-    await ctx.send(message)
 
 @bot.event
 async def on_ready():
@@ -195,7 +156,6 @@ async def on_ready():
     channel = guild.get_channel(1397290675090751508)  # Your channel ID
     role = guild.get_role(1243994548624031856)  # Your role ID
     schedule_prayers(channel, role)
-    send_quran_quote.start()
 
 app = Flask('')
 
