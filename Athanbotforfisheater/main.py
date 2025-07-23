@@ -36,7 +36,13 @@ class PrayerButton(discord.ui.View):
         prayer_counts[key].add(interaction.user.id)
         count = len(prayer_counts[key])
 
-        new_content = f"{interaction.message.content.splitlines()[0]}\n✅ **{count}** people have prayed so far."
+        lines = interaction.message.content.splitlines()
+        for i, line in enumerate(lines):
+            if "✅" in line:
+                lines[i] = f"✅ **{count}** people have prayed so far."
+                break
+        new_content = "\n".join(lines)
+
         await interaction.response.edit_message(content=new_content, view=self)
 
 def get_prayer_times(city="Atlanta", country="USA"):
