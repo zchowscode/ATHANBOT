@@ -15,33 +15,43 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 scheduler = AsyncIOScheduler()
 
-# === BUTTON VIEW CLASS ===
+# === BUTTON VIEW CLASS (one click per user) ===
 class PrayerView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.count = 0
+        self.clicked_users = set()
 
     @discord.ui.button(label="I prayed 🙏", style=discord.ButtonStyle.primary, custom_id="prayer_button")
     async def prayer_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.clicked_users:
+            await interaction.response.send_message("You've already clicked for this prayer.", ephemeral=True)
+            return
+
+        self.clicked_users.add(interaction.user.id)
         self.count += 1
+
         await interaction.response.edit_message(
-            content=interaction.message.content.split("\n⏳")[0] + 
-            f"\n\n🙏 {self.count} people clicked 'I prayed 🙏'\n" + 
+            content=interaction.message.content.split("\n⏳")[0] +
+            f"\n\n🙏 {self.count} people clicked 'I prayed 🙏'\n" +
             interaction.message.content.split("\n")[-1],
             view=self
         )
 
-# === SEND PRAYER PING WITH BUTTON + COUNTDOWN ===
+# === PRAYER TIME API ===
+def get_prayer_times(city="Atlanta", country="USA"):
+    url = f"http://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=2"
+    return requests.get(url).json()['data']['timings']
+
+# === PRAYER PING FUNCTION WITH TIMER ===
 async def send_prayer_ping(channel, role, prayer_name):
     view = PrayerView()
-
     tz = pytz.timezone("America/New_York")
     now = datetime.now(tz)
     timings = get_prayer_times()
 
     prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
     upcoming = []
-
     for p in prayers:
         hour, minute = map(int, timings[p].split(":"))
         t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -70,7 +80,6 @@ async def send_prayer_ping(channel, role, prayer_name):
 
     msg = await channel.send(content, view=view)
 
-    # Update every 5 minutes
     async def updater():
         while True:
             if next_prayer:
@@ -91,12 +100,7 @@ async def send_prayer_ping(channel, role, prayer_name):
 
     bot.loop.create_task(updater())
 
-# === PRAYER API ===
-def get_prayer_times(city="Atlanta", country="USA"):
-    url = f"http://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=2"
-    return requests.get(url).json()['data']['timings']
-
-# === SCHEDULE PRAYERS ===
+# === SCHEDULER SETUP ===
 def schedule_prayers(channel, role):
     scheduler.remove_all_jobs()
     tz = pytz.timezone("America/New_York")
@@ -104,21 +108,20 @@ def schedule_prayers(channel, role):
     timings = get_prayer_times()
 
     for prayer_name in ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']:
-        time_str = timings[prayer_name]
-        hour, minute = map(int, time_str.split(":"))
+        hour, minute = map(int, timings[prayer_name].split(":"))
         run_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if run_time < now:
             run_time += timedelta(days=1)
         scheduler.add_job(send_prayer_ping, 'date', run_date=run_time, args=[channel, role, prayer_name])
     scheduler.start()
 
-# === BOT READY EVENT ===
+# === BOT EVENTS ===
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
     guild = bot.guilds[0]
-    channel = guild.get_channel(1397290675090751508)  # Replace with your channel ID
-    role = guild.get_role(1243994548624031856)        # Replace with your role ID
+    channel = guild.get_channel(1397290675090751508)
+    role = guild.get_role(1243994548624031856)
     schedule_prayers(channel, role)
 
 # === COMMANDS ===
@@ -134,14 +137,13 @@ async def next_namaz(ctx):
 
     tz = pytz.timezone("America/New_York")
     now = datetime.now(tz)
-
     prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+
     next_prayer = None
     next_time = None
 
     for prayer in prayers:
-        time_str = timings[prayer]
-        hour, minute = map(int, time_str.split(":"))
+        hour, minute = map(int, timings[prayer].split(":"))
         prayer_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if prayer_time < now:
             prayer_time += timedelta(days=1)
@@ -154,19 +156,15 @@ async def next_namaz(ctx):
 
 @bot.command(name='todayprayers')
 async def today_prayers(ctx):
-    city = "Atlanta"
-    country = "USA"
-    timings = get_prayer_times(city, country)
-
+    timings = get_prayer_times("Atlanta", "USA")
     msg = "**Today's Prayer Times (Atlanta):**\n"
     for prayer in ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']:
         msg += f"{prayer}: {timings[prayer]}\n"
-
     await ctx.send(msg)
 
 @bot.command(name='testprayer')
 async def testprayer(ctx):
-    role = ctx.guild.get_role(1243994548624031856)  # Main prayer role
+    role = ctx.guild.get_role(1243994548624031856)
     await send_prayer_ping(ctx.channel, role, "Test Prayer")
 
 # === KEEP ALIVE ===
