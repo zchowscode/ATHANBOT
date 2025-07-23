@@ -54,8 +54,17 @@ def schedule_prayers(channel, role):
         run_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if run_time < now:
             run_time += timedelta(days=1)
+
         scheduler.add_job(send_prayer_ping, 'date', run_date=run_time, args=[channel, role, prayer_name])
+
+        reminder_time = run_time - timedelta(minutes=5)
+        if reminder_time > now:
+            scheduler.add_job(send_5_min_reminder, 'date', run_date=reminder_time, args=[channel, role, prayer_name])
+
     scheduler.start()
+
+async def send_5_min_reminder(channel, role, next_prayer):
+    await channel.send(f"{role.mention} ⏳ Only **5 minutes** left until **{next_prayer}** prayer. Please prepare to pray.")
 
 async def send_prayer_ping(channel, role, prayer_name):
     await send_dynamic_prayer_message(channel, role, prayer_name, is_test=False)
