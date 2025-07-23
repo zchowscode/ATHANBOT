@@ -19,9 +19,11 @@ class PrayerButton(discord.ui.View):
     def __init__(self, prayer_name):
         super().__init__(timeout=None)
         self.prayer_name = prayer_name
+        self.prayed_button = discord.ui.Button(label="✅ I Prayed", style=discord.ButtonStyle.success, custom_id=f"prayed_button_{prayer_name}")
+        self.prayed_button.callback = self.prayed
+        self.add_item(self.prayed_button)
 
-    @discord.ui.button(label="✅ I Prayed", style=discord.ButtonStyle.success, custom_id="prayed_button")
-    async def prayed(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def prayed(self, interaction: discord.Interaction):
         key = (interaction.message.id, self.prayer_name)
 
         if key not in prayer_counts:
@@ -54,7 +56,8 @@ def schedule_prayers(channel, role):
         if run_time < now:
             run_time += timedelta(days=1)
         scheduler.add_job(send_prayer_ping, 'date', run_date=run_time, args=[channel, role, prayer_name])
-    scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
 
 async def send_prayer_ping(channel, role, prayer_name):
     content = f"{role.mention} 🕌 It's time for **{prayer_name}** prayer!\n✅ **0** people have prayed so far."
